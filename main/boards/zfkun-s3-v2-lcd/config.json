@@ -1,0 +1,26 @@
+{
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "zfkun-s3-v2-lcd-240x240",
+            "sdkconfig_append": [
+                "CONFIG_USE_AFE_WAKE_WORD=y",
+                "CONFIG_USE_DEVICE_AEC=y",
+                "CONFIG_USE_AUDIO_PROCESSOR=y",
+                "CONFIG_LCD_ST7789_240X240=y",
+                "CONFIG_SD_ENABLE=y"
+            ]
+        },
+        {
+            "name": "zfkun-s3-v2-lcd-240x240-debug-for-v1",
+            "sdkconfig_append": [
+                "CONFIG_USE_AFE_WAKE_WORD=y",
+                "CONFIG_USE_DEVICE_AEC=y",
+                "CONFIG_USE_AUDIO_PROCESSOR=y",
+                "CONFIG_LCD_ST7789_240X240=y",
+                "CONFIG_SD_ENABLE=y",
+                "CONFIG_LCD_DEBUG_FOR_V1=y"
+            ]
+        }
+    ]
+}

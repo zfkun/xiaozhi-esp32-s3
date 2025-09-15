@@ -373,6 +373,15 @@ choice BOARD_TYPE
     config BOARD_TYPE_YUNLIAO_S3
         bool "小智云聊-S3"
         depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ZFKUN_S3_V1
+        bool "小智S3 双麦 (普通)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ZFKUN_S3_V2
+        bool "小智S3 双麦 (经典)"
+        depends on IDF_TARGET_ESP32S3
+    config BOARD_TYPE_ZFKUN_S3_V2_LCD
+        bool "小智S3 双麦 (经典 LCD)"
+        depends on IDF_TARGET_ESP32S3
 endchoice
 
 choice ESP_S3_LCD_EV_Board_Version_TYPE
@@ -388,7 +397,7 @@ choice ESP_S3_LCD_EV_Board_Version_TYPE
 endchoice
 
 choice DISPLAY_OLED_TYPE
-    depends on BOARD_TYPE_BREAD_COMPACT_WIFI || BOARD_TYPE_BREAD_COMPACT_ML307 || BOARD_TYPE_BREAD_COMPACT_ESP32
+    depends on BOARD_TYPE_BREAD_COMPACT_WIFI || BOARD_TYPE_BREAD_COMPACT_ML307 || BOARD_TYPE_BREAD_COMPACT_ESP32 || BOARD_TYPE_ZFKUN_S3_V1 || BOARD_TYPE_ZFKUN_S3_V2
     prompt "OLED Type"
     default OLED_SSD1306_128X32
     help
@@ -402,7 +411,7 @@ choice DISPLAY_OLED_TYPE
 endchoice
 
 choice DISPLAY_LCD_TYPE
-    depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD || BOARD_TYPE_BREAD_COMPACT_ESP32_LCD || BOARD_TYPE_ESP32_CGC || BOARD_TYPE_ESP32P4_NANO || BOARD_TYPE_ESP32P4_WIFI6_Touch_LCD_XC || BOARD_TYPE_BREAD_COMPACT_WIFI_CAM
+    depends on BOARD_TYPE_BREAD_COMPACT_WIFI_LCD || BOARD_TYPE_BREAD_COMPACT_ESP32_LCD || BOARD_TYPE_ESP32_CGC || BOARD_TYPE_ESP32P4_NANO || BOARD_TYPE_ESP32P4_WIFI6_Touch_LCD_XC || BOARD_TYPE_BREAD_COMPACT_WIFI_CAM || BOARD_TYPE_ZFKUN_S3_V2_LCD
     prompt "LCD Type"
     default LCD_ST7789_240X320
     help
@@ -532,7 +541,7 @@ config USE_AUDIO_PROCESSOR
 config USE_DEVICE_AEC
     bool "Enable Device-Side AEC"
     default n
-        depends on USE_AUDIO_PROCESSOR && (BOARD_TYPE_ESP_BOX_3 || BOARD_TYPE_ESP_BOX || BOARD_TYPE_ESP_BOX_LITE || BOARD_TYPE_LICHUANG_DEV || BOARD_TYPE_ESP32S3_KORVO2_V3 || BOARD_TYPE_ESP32S3_Touch_AMOLED_1_75 || BOARD_TYPE_ESP32S3_Touch_AMOLED_2_06 || BOARD_TYPE_ESP32P4_WIFI6_Touch_LCD_4B || BOARD_TYPE_ESP32P4_WIFI6_Touch_LCD_XC || BOARD_TYPE_ESP_S3_LCD_EV_Board_2 || BOARD_TYPE_YUNLIAO_S3)
+        depends on USE_AUDIO_PROCESSOR && (BOARD_TYPE_ESP_BOX_3 || BOARD_TYPE_ESP_BOX || BOARD_TYPE_ESP_BOX_LITE || BOARD_TYPE_LICHUANG_DEV || BOARD_TYPE_ESP32S3_KORVO2_V3 || BOARD_TYPE_ESP32S3_Touch_AMOLED_1_75 || BOARD_TYPE_ESP32S3_Touch_AMOLED_2_06 || BOARD_TYPE_ESP32P4_WIFI6_Touch_LCD_4B || BOARD_TYPE_ESP32P4_WIFI6_Touch_LCD_XC || BOARD_TYPE_ESP_S3_LCD_EV_Board_2 || BOARD_TYPE_YUNLIAO_S3 || BOARD_TYPE_ZFKUN_S3_V1 || BOARD_TYPE_ZFKUN_S3_V2 || BOARD_TYPE_ZFKUN_S3_V2_LCD)
     help
         因为性能不够，不建议和微信聊天界面风格同时开启
 
@@ -579,5 +588,33 @@ choice I2S_TYPE_TAIJIPI_S3
     config TAIJIPAI_I2S_TYPE_PDM
         bool "I2S Type PDM"
 endchoice
+
+choice AUDIO_PROCESSING_ALGORITHM
+    depends on USE_DEVICE_AEC && (BOARD_TYPE_ZFKUN_S3_V1)
+    prompt "Audio Processing Algorithm"
+    default AUDIO_PROCESSING_ALGORITHM_2
+    help
+        音频增益处理算法
+    config AUDIO_PROCESSING_ALGORITHM_0
+        bool "简单平均"
+    config AUDIO_PROCESSING_ALGORITHM_1
+        bool "基础波束成形"
+    config AUDIO_PROCESSING_ALGORITHM_2
+        bool "噪声抑制"
+endchoice
+
+config SD_ENABLE
+    bool "Enable SD Card Support"
+    default y
+        depends on (BOARD_TYPE_ZFKUN_S3_V2 || BOARD_TYPE_ZFKUN_S3_V2_LCD)
+    help
+        开启SD卡支持功能 (开机自动挂载)
+
+config LCD_DEBUG_FOR_V1
+    bool "Enable Debug For V1 Device"
+    default n
+        depends on BOARD_TYPE_ZFKUN_S3_V2_LCD
+    help
+        开启屏幕调试 (仅用于初版V1.0设备)
 
 endmenu
