@@ -19,9 +19,9 @@ python scripts/release.py zfkun-s3-v2-lcd
 
 elseif(CONFIG_BOARD_TYPE_ZFKUN_S3_V2_LCD)
     set(BOARD_TYPE "zfkun-s3-v2-lcd")
-    set(LVGL_TEXT_FONT ${FONT_PUHUI_BASIC_20_4})
-    set(LVGL_ICON_FONT ${FONT_AWESOME_20_4})
-    set(DEFAULT_ASSETS ${ASSETS_XIAOZHI_PUHUI_COMMON_20_4_EMOJI_64})
+    set(BUILTIN_TEXT_FONT font_puhui_basic_20_4)
+    set(BUILTIN_ICON_FONT font_awesome_20_4)
+    set(DEFAULT_EMOJI_COLLECTION twemoji_64)
 
 ...
 ```

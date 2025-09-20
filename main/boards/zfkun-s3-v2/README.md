@@ -16,9 +16,9 @@ python scripts/release.py zfkun-s3-v2
 
 elseif(CONFIG_BOARD_TYPE_ZFKUN_S3_V2)
     set(BOARD_TYPE "zfkun-s3-v2")
-    set(LVGL_TEXT_FONT ${FONT_PUHUI_BASIC_14_1})
-    set(LVGL_ICON_FONT ${FONT_AWESOME_14_1})
-    set(DEFAULT_ASSETS ${ASSETS_XIAOZHI_PUHUI_COMMON_14_1})
+    set(BUILTIN_TEXT_FONT font_puhui_basic_14_1)
+    set(BUILTIN_ICON_FONT font_awesome_14_1)
+
 ...
 ```
 
