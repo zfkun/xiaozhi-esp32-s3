@@ -655,6 +655,13 @@ config SD_ENABLE
     help
         开启SD卡支持功能 (开机自动挂载)
 
+config SERVO_ENABLE
+    bool "Enable Servo Support"
+    default y
+        depends on (BOARD_TYPE_ZFKUN_S3_V2 || BOARD_TYPE_ZFKUN_S3_V2_LCD)
+    help
+        开启舵机控制支持功能 (SG90)
+
 config LCD_DEBUG_FOR_V1
     bool "Enable Debug For V1 Device"
     default n

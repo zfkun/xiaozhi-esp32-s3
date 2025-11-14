@@ -8,7 +8,8 @@
                 "CONFIG_USE_DEVICE_AEC=y",
                 "CONFIG_USE_AUDIO_PROCESSOR=y",
                 "CONFIG_LCD_ST7789_240X240=y",
-                "CONFIG_SD_ENABLE=y"
+                "CONFIG_SD_ENABLE=y",
+                "CONFIG_SERVO_ENABLE=y"
             ]
         },
         {
@@ -19,6 +20,7 @@
                 "CONFIG_USE_AUDIO_PROCESSOR=y",
                 "CONFIG_LCD_ST7789_240X240=y",
                 "CONFIG_SD_ENABLE=y",
+                "CONFIG_SERVO_ENABLE=y",
                 "CONFIG_LCD_DEBUG_FOR_V1=y"
             ]
         }

@@ -27,6 +27,10 @@
 #include <dirent.h>
 #endif
 
+#if CONFIG_SERVO_ENABLE
+#include "iot_servo.h"
+#endif
+
 #if defined(LCD_TYPE_ILI9341_SERIAL)
 #include "esp_lcd_ili9341.h"
 #endif
@@ -141,6 +145,41 @@ private:
     bool sdcard_mounted_ = false;
     bool sdcard_present_ = false;
     uint32_t last_sdcard_check_ = 0;
+#endif
+
+#if CONFIG_SERVO_ENABLE
+    // 舵机移动回调函数类型
+    typedef std::function<void(int channel, int angle)> ServoMoveCallback;
+
+    // 带回调的舵机控制函数
+    void MoveServoWithCallback(int channel, int angle, ServoMoveCallback callback = nullptr) {
+        // 执行舵机移动
+        iot_servo_write_angle(LEDC_LOW_SPEED_MODE, channel, angle);
+        
+        // 等待舵机移动完成（基于经验设定延时）
+        // SG90舵机通常需要几百毫秒完成60度以上的转动
+        int delay_ms = abs(angle - GetCurrentServoAngle(channel)) * 5; // 简单估算，每度5ms
+        if (delay_ms < 100) delay_ms = 100;  // 最小延时
+        if (delay_ms > 1000) delay_ms = 1000; // 最大延时
+        
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+        
+        // 调用回调函数
+        if (callback) {
+            callback(channel, angle);
+        }
+    }
+
+    // 获取当前舵机角度的辅助函数
+    int GetCurrentServoAngle(int channel) {
+        float angle;
+        esp_err_t err = iot_servo_read_angle(LEDC_LOW_SPEED_MODE, channel, &angle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "读取舵机角度失败: channel=%d, err=%s", channel, esp_err_to_name(err));
+            return -1;
+        }
+        return static_cast<int>(angle);
+    }
 #endif
 
     void InitializeI2c() {
@@ -390,6 +429,131 @@ private:
     }
 #endif
 
+#if CONFIG_SERVO_ENABLE
+    void InitializeServo() {
+        ESP_LOGI(TAG, "Initializing Servo");
+
+        // 初始化舵机
+        servo_config_t servo_cfg = {
+            .max_angle = SERVO_MAX_ANGLE,
+            .min_width_us = SERVO_MIN_WIDTH_US,
+            .max_width_us = SERVO_MAX_WIDTH_US,
+            .freq = 50,
+            .timer_number = LEDC_TIMER_0,
+            .channels = {
+                .servo_pin = {
+                    SERVO_0_GPIO,
+                    SERVO_1_GPIO,
+                    SERVO_2_GPIO,
+                    SERVO_3_GPIO,
+                },
+                .ch = {
+                    LEDC_CHANNEL_0,
+                    LEDC_CHANNEL_1,
+                    LEDC_CHANNEL_2,
+                    LEDC_CHANNEL_3,
+                },
+            },
+            .channel_number = 4,
+        };
+        ESP_ERROR_CHECK(iot_servo_init(LEDC_LOW_SPEED_MODE, &servo_cfg));
+
+
+        // 复位初始角度
+        esp_err_t err;
+        for (int i = 0; i < 4; i++) {
+          err = iot_servo_write_angle(LEDC_LOW_SPEED_MODE,
+                                      servo_cfg.channels.ch[i],
+                                      SERVO_DEFAULT_ANGLE);
+          if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to reset servo angle: channel=%d, angle=%d, err=%d", i, SERVO_DEFAULT_ANGLE, err);
+          }
+        }
+    }
+
+    void AddServoTools() { 
+        auto& mcp_server = McpServer::GetInstance();
+        ESP_LOGI(TAG, "开始注册舵机MCP工具...");
+
+        // 设置单个舵机角度
+        mcp_server.AddTool(
+            "self.servo.set_angle",
+            "设置SG90舵机到指定角度。"
+            "channel: 目标舵机编号(0-3)"
+            "angle: 目标角度(0-180度)",
+            PropertyList({
+              Property("channel", kPropertyTypeInteger, 0, 0, 3),
+              Property("angle", kPropertyTypeInteger, 90, 0, 180)
+            }),
+            [this](const PropertyList &properties) -> ReturnValue {
+              int channel = properties["channel"].value<int>();
+              int angle = properties["angle"].value<int>();
+              // iot_servo_write_angle(LEDC_LOW_SPEED_MODE, channel, angle);
+              MoveServoWithCallback(channel, angle, [this](int ch, int ang) {
+                  ESP_LOGI(TAG, "舵机 %d 完成移动到 %d 度", ch, ang);
+                  // 可以在这里添加更多回调逻辑
+              });
+
+              return std::to_string(channel) + "号舵机设置到 " + std::to_string(angle) + " 度";
+            });
+
+        // 设置所有舵机角度
+        mcp_server.AddTool(
+            "self.servo.set_angle_all",
+            "同时设置所有SG90舵机到指定角度。"
+            "angle: 目标角度(0-180度)",
+            PropertyList({
+              Property("angle", kPropertyTypeInteger, 90, 0, 180)
+            }),
+            [this](const PropertyList &properties) -> ReturnValue {
+              int angle = properties["angle"].value<int>();
+              // iot_servo_write_angle(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, angle);
+              // iot_servo_write_angle(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_1, angle);
+              // iot_servo_write_angle(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_2, angle);
+              // iot_servo_write_angle(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_3, angle);
+
+              // 为每个舵机执行移动并添加回调
+              for (int i = 0; i < 4; i++) {
+                  MoveServoWithCallback(i, angle, [this](int ch, int ang) {
+                      ESP_LOGI(TAG, "舵机 %d 完成移动到 %d 度", ch, ang);
+                  });
+              }
+
+              return "所有舵机设置到 " + std::to_string(angle) + " 度";
+            });
+
+        // 获取舵机状态
+        mcp_server.AddTool("self.servo.get_status_all",
+            "获取所有SG90舵机当前状态",
+            PropertyList(),
+            [this](const PropertyList& properties) -> ReturnValue {
+                float angles[4] = {0, 0, 0, 0};
+                std::string status = "{\"angles\":[";
+
+                esp_err_t err = ESP_OK;
+                for (int i = 0; i <= 3; i++) {
+                  err = iot_servo_read_angle(LEDC_LOW_SPEED_MODE, i, &angles[i]);
+                  if (err != ESP_OK) {
+                    ESP_LOGE(TAG, "%d 号舵机角度读取失败: %s", i, esp_err_to_name(err));
+                  }
+
+                  status += (i > 0 ? "," : "") + std::to_string(angles[i]);
+                }
+                
+                status += "]}";
+
+                ESP_LOGI(TAG, "舵机状态: %s", status.c_str());
+                return status;
+          });
+    }
+#endif
+
+    void InitializeTools() {
+#if CONFIG_SERVO_ENABLE
+        AddServoTools();
+#endif
+    }
+
 public:
     ZfkunS3V2LcdBoard(): boot_button_(BOOT_BUTTON_GPIO), user_button_(USER_BUTTON_GPIO) {
         InitializeI2c();
@@ -400,13 +564,22 @@ public:
 #if CONFIG_SD_ENABLE
         InitializeSdcard();
 #endif
+#if CONFIG_SERVO_ENABLE
+        InitializeServo();
+#endif
+        InitializeTools();
         if (DISPLAY_BACKLIGHT_PIN != GPIO_NUM_NC) {
             GetBacklight()->RestoreBrightness();
         }
     }
 
     ~ZfkunS3V2LcdBoard() {
+#if CONFIG_SD_ENABLE
         UnmountSdcard();
+#endif
+#if CONFIG_SERVO_ENABLE
+        iot_servo_deinit(LEDC_LOW_SPEED_MODE);
+#endif
     }
 
     virtual Led* GetLed() override {

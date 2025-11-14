@@ -51,4 +51,18 @@
 #define SD_CARD_BASE_PATH   "/sdcard"
 #endif
 
+// 舵机 (SG90)
+#ifdef CONFIG_SERVO_ENABLE
+#define SERVO_0_GPIO GPIO_NUM_4           // 舵机0
+#define SERVO_1_GPIO GPIO_NUM_5           // 舵机1
+#define SERVO_2_GPIO GPIO_NUM_6           // 舵机2
+#define SERVO_3_GPIO GPIO_NUM_7           // 舵机3
+
+#define SERVO_MIN_WIDTH_US  500           // 最小脉宽（微秒）对应0度
+#define SERVO_MAX_WIDTH_US  2500          // 最大脉宽（微秒）对应180度
+#define SERVO_MIN_ANGLE     0             // 最小角度
+#define SERVO_MAX_ANGLE     180           // 最大角度
+#define SERVO_DEFAULT_ANGLE 90            // 默认中心位置
+#endif
+
 #endif // _BOARD_CONFIG_H_
