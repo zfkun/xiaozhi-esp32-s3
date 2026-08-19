@@ -30,6 +30,13 @@
 
 #if CONFIG_SERVO_ENABLE
 #include "iot_servo.h"
+
+servo_handle_t servo_handles_[4] = {
+    nullptr,
+    nullptr,
+    nullptr,
+    nullptr
+};
 #endif
 
 #define TAG "ZfkunS3V2Board"
@@ -113,18 +120,45 @@ private:
 
     // 带回调的舵机控制函数
     void MoveServoWithCallback(int channel, int angle, ServoMoveCallback callback = nullptr) {
-        // 执行舵机移动
-        iot_servo_write_angle(LEDC_LOW_SPEED_MODE, channel, angle);
-        
+            if (channel < 0 || channel >= 4 ||
+            servo_handles_[channel] == nullptr) {
+            ESP_LOGE(TAG, "舵机通道无效: %d", channel);
+            return;
+        }
+
+        esp_err_t err = iot_servo_write_angle(
+            servo_handles_[channel],
+            static_cast<float>(angle)
+        );
+
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG,
+                        "设置舵机角度失败: channel=%d, angle=%d, err=%s",
+                        channel,
+                        angle,
+                        esp_err_to_name(err));
+            return;
+        }
+
         // 等待舵机移动完成（基于经验设定延时）
         // SG90舵机通常需要几百毫秒完成60度以上的转动
-        int delay_ms = abs(angle - GetCurrentServoAngle(channel)) * 5; // 简单估算，每度5ms
-        if (delay_ms < 100) delay_ms = 100;  // 最小延时
-        if (delay_ms > 1000) delay_ms = 1000; // 最大延时
-        
+        int current_angle = GetCurrentServoAngle(channel);
+        int delay_ms = 100;
+
+        if (current_angle >= 0) {
+            delay_ms = abs(angle - current_angle) * 5;
+
+            if (delay_ms < 100) {
+                delay_ms = 100;  // 最小延时
+            }
+
+            if (delay_ms > 1000) {
+                delay_ms = 1000; // 最大延时
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(delay_ms));
-        
-        // 调用回调函数
+
         if (callback) {
             callback(channel, angle);
         }
@@ -132,12 +166,27 @@ private:
 
     // 获取当前舵机角度的辅助函数
     int GetCurrentServoAngle(int channel) {
-        float angle;
-        esp_err_t err = iot_servo_read_angle(LEDC_LOW_SPEED_MODE, channel, &angle);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "读取舵机角度失败: channel=%d, err=%s", channel, esp_err_to_name(err));
+        if (channel < 0 || channel >= 4 ||
+            servo_handles_[channel] == nullptr) {
+            ESP_LOGE(TAG, "舵机通道无效: %d", channel);
             return -1;
         }
+
+        float angle = 0.0f;
+
+        esp_err_t err = iot_servo_read_angle(
+            servo_handles_[channel],
+            &angle
+        );
+
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG,
+                    "读取舵机角度失败: channel=%d, err=%s",
+                    channel,
+                    esp_err_to_name(err));
+            return -1;
+        }
+
         return static_cast<int>(angle);
     }
 #endif
@@ -193,24 +242,24 @@ private:
         // SSD1306 config
         esp_lcd_panel_io_i2c_config_t io_config = {
             .dev_addr = 0x3C,
-            .on_color_trans_done = nullptr,
-            .user_ctx = nullptr,
+            .scl_speed_hz = 400 * 1000,
             .control_phase_bytes = 1,
             .dc_bit_offset = 6,
             .lcd_cmd_bits = 8,
             .lcd_param_bits = 8,
+            .on_color_trans_done = nullptr,
+            .user_ctx = nullptr,
             .flags = {
                 .dc_low_on_data = 0,
                 .disable_control_phase = 0,
             },
-            .scl_speed_hz = 400 * 1000,
         };
 
-        ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c_v2(i2c_bus_, &io_config, &panel_io));
+        ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_, &io_config, &panel_io));
 
         ESP_LOGI(TAG, "Install SSD1306 driver");
         esp_lcd_panel_dev_config_t panel_config = {};
-        panel_config.reset_gpio_num = -1;
+        panel_config.reset_gpio_num = GPIO_NUM_NC;
         panel_config.bits_per_pixel = 1;
 
         esp_lcd_panel_ssd1306_config_t ssd1306_config = {
@@ -249,6 +298,7 @@ private:
     void InitializeSdcard() {
         ESP_LOGI(TAG, "Initializing SD card");
 
+#if SD_CARD_DETECT_GPIO != GPIO_NUM_NC
         // 如果有SD卡检测引脚，配置为输入
         if (SD_CARD_DETECT_GPIO != GPIO_NUM_NC) {
             gpio_config_t io_conf = {};
@@ -259,7 +309,8 @@ private:
             io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
             gpio_config(&io_conf);
         }
-        
+#endif
+
         // 初始化SD卡状态
         sdcard_present_ = IsSdcardPresent();
         
@@ -383,41 +434,67 @@ private:
     void InitializeServo() {
         ESP_LOGI(TAG, "Initializing Servo");
 
-        // 初始化舵机
-        servo_config_t servo_cfg = {
-            .max_angle = SERVO_MAX_ANGLE,
-            .min_width_us = SERVO_MIN_WIDTH_US,
-            .max_width_us = SERVO_MAX_WIDTH_US,
-            .freq = 50,
-            .timer_number = LEDC_TIMER_0,
-            .channels = {
-                .servo_pin = {
-                    SERVO_0_GPIO,
-                    SERVO_1_GPIO,
-                    SERVO_2_GPIO,
-                    SERVO_3_GPIO,
-                },
-                .ch = {
-                    LEDC_CHANNEL_0,
-                    LEDC_CHANNEL_1,
-                    LEDC_CHANNEL_2,
-                    LEDC_CHANNEL_3,
-                },
-            },
-            .channel_number = 4,
+        const gpio_num_t servo_gpios[4] = {
+            SERVO_0_GPIO,
+            SERVO_1_GPIO,
+            SERVO_2_GPIO,
+            SERVO_3_GPIO
         };
-        ESP_ERROR_CHECK(iot_servo_init(LEDC_LOW_SPEED_MODE, &servo_cfg));
 
+        const ledc_channel_t servo_channels[4] = {
+            LEDC_CHANNEL_0,
+            LEDC_CHANNEL_1,
+            LEDC_CHANNEL_2,
+            LEDC_CHANNEL_3
+        };
 
-        // 复位初始角度
-        esp_err_t err;
         for (int i = 0; i < 4; i++) {
-          err = iot_servo_write_angle(LEDC_LOW_SPEED_MODE,
-                                      servo_cfg.channels.ch[i],
-                                      SERVO_DEFAULT_ANGLE);
-          if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to reset servo angle: channel=%d, angle=%d, err=%d", i, SERVO_DEFAULT_ANGLE, err);
-          }
+            servo_config_t servo_cfg = {
+                .max_angle = SERVO_MAX_ANGLE,
+                .min_width_us = SERVO_MIN_WIDTH_US,
+                .max_width_us = SERVO_MAX_WIDTH_US,
+                .freq = 50,
+                .speed_mode = LEDC_LOW_SPEED_MODE,
+                .timer_number = LEDC_TIMER_0,
+                .channel = servo_channels[i],
+                .gpio_num = servo_gpios[i],
+            };
+
+            esp_err_t err = iot_servo_new(
+                &servo_cfg,
+                &servo_handles_[i]
+            );
+
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG,
+                        "Failed to initialize servo %d: GPIO=%d, channel=%d, err=%s",
+                        i,
+                        servo_cfg.gpio_num,
+                        servo_cfg.channel,
+                        esp_err_to_name(err));
+
+                servo_handles_[i] = nullptr;
+                continue;
+            }
+
+            ESP_LOGI(TAG,
+                    "Servo %d initialized: GPIO=%d, channel=%d",
+                    i,
+                    servo_cfg.gpio_num,
+                    servo_cfg.channel);
+
+            err = iot_servo_write_angle(
+                servo_handles_[i],
+                static_cast<float>(SERVO_DEFAULT_ANGLE)
+            );
+
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG,
+                        "Failed to reset servo %d angle: angle=%d, err=%s",
+                        i,
+                        SERVO_DEFAULT_ANGLE,
+                        esp_err_to_name(err));
+            }
         }
     }
 
@@ -481,13 +558,26 @@ private:
                 std::string status = "{\"angles\":[";
 
                 esp_err_t err = ESP_OK;
-                for (int i = 0; i <= 3; i++) {
-                  err = iot_servo_read_angle(LEDC_LOW_SPEED_MODE, i, &angles[i]);
-                  if (err != ESP_OK) {
-                    ESP_LOGE(TAG, "%d 号舵机角度读取失败: %s", i, esp_err_to_name(err));
-                  }
+                for (int i = 0; i < 4; i++) {
+                    if (servo_handles_[i] == nullptr) {
+                        ESP_LOGE(TAG, "%d 号舵机未初始化", i);
+                        continue;
+                    }
 
-                  status += (i > 0 ? "," : "") + std::to_string(angles[i]);
+                    err = iot_servo_read_angle(
+                        servo_handles_[i],
+                        &angles[i]
+                    );
+
+                    if (err != ESP_OK) {
+                        ESP_LOGE(TAG,
+                                "%d 号舵机角度读取失败: %s",
+                                i,
+                                esp_err_to_name(err));
+                    }
+
+                    status += (i > 0 ? "," : "") +
+                            std::to_string(angles[i]);
                 }
                 
                 status += "]}";
@@ -526,7 +616,12 @@ public:
         UnmountSdcard();
 #endif
 #if CONFIG_SERVO_ENABLE
-        iot_servo_deinit(LEDC_LOW_SPEED_MODE);
+        for (int i = 0; i < 4; i++) {
+            if (servo_handles_[i] != nullptr) {
+                iot_servo_del(servo_handles_[i]);
+                servo_handles_[i] = nullptr;
+            }
+        }
 #endif
     }
 

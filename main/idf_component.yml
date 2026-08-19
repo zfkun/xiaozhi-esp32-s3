@@ -117,7 +117,7 @@ dependencies:
 
   # Zfkun-S3 Board
   espressif/servo:
-    version: ^0.1.0
+    version: ^1.0.0
     rules:
     - if: target in [esp32s3]
 

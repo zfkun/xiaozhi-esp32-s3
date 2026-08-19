@@ -37,7 +37,7 @@ Ics43434AudioCodec::Ics43434AudioCodec(
 
     // Create a new channel for speaker
     i2s_chan_config_t chan_cfg = {
-        .id = (i2s_port_t)1,
+        .id = 1,
         .role = I2S_ROLE_MASTER,
         .dma_desc_num = AUDIO_CODEC_DMA_DESC_NUM,
         .dma_frame_num = AUDIO_CODEC_DMA_FRAME_NUM,
@@ -86,7 +86,7 @@ Ics43434AudioCodec::Ics43434AudioCodec(
     ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_handle_, &std_cfg));
 
     // Create the primary MIC channel
-    chan_cfg.id = (i2s_port_t)0;
+    chan_cfg.id = 0;
     ESP_ERROR_CHECK(i2s_new_channel(&chan_cfg, nullptr, &rx_handle_));
     std_cfg.clk_cfg.sample_rate_hz = (uint32_t)input_sample_rate_;
     std_cfg.slot_cfg.slot_mode = I2S_SLOT_MODE_STEREO;
